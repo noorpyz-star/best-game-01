@@ -1,0 +1,32 @@
+/* LUMEN DRIFT — page chrome. The game itself is drawn on the canvas; this
+   file only centres it on a dark page and hides the screen-reader status line. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #04060f;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  display: block;
+  touch-action: none;
+  background: #070b1a;
+  cursor: crosshair;
+}
+
+/* Read aloud, never shown: the status line screen readers announce. */
+#status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
