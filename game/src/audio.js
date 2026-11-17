@@ -126,6 +126,12 @@ export function playLevelUp() {
   notes.forEach((n, i) => setTimeout(() => tone(n, 0.22, 'triangle', 0.2), i * 110));
 }
 
+/** Seeker inbound: two quiet warning blips. */
+export function playWarn() {
+  tone(220, 0.12, 'sine', 0.14);
+  setTimeout(() => tone(165, 0.16, 'sine', 0.14), 130);
+}
+
 /** Dash: a soft whoosh. */
 export function playDash() {
   noiseBurst(0.16, 0.16, 2400);

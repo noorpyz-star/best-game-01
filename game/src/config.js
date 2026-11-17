@@ -26,6 +26,27 @@ export const ASTEROID = {
   bulwark: { radius: 58, hits: 5, score: 300, salvage: 4, speed: [26, 44] },
 };
 
+export const SEEKER = {
+  radius: 15,
+  hits: 1,
+  score: 250,
+  salvage: 1,
+  // Homes in on the ship from level 3; slow to turn, fast in a straight line.
+  speed: 150,
+  homing: 300,
+  turnRate: 2.6,
+  appearLevel: 3,
+  spawnPerSecond: 0.22,
+  max: 2,
+};
+
+export const ELITE = {
+  // Rare gold rocks from level 4: double score, one extra salvage.
+  chance: 0.07,
+  minLevel: 4,
+  scoreMult: 2,
+};
+
 export const SALVAGE = {
   radius: 10,
   value: 25,
@@ -37,8 +58,8 @@ export const POWERUP = {
   radius: 14,
   lifetime: 11,
   dropChance: 0.16,
-  kinds: ['magnet', 'shield', 'overdrive'],
-  durations: { magnet: 12, shield: 0, overdrive: 9 },
+  kinds: ['magnet', 'shield', 'overdrive', 'repair'],
+  durations: { magnet: 12, shield: 0, overdrive: 9, repair: 0 },
 };
 
 export const COMBO = {
@@ -64,6 +85,6 @@ export const PARTICLES = {
 
 export const SHOT = {
   startSeconds: 4,
-  playSeconds: 26,
+  playSeconds: 30,
   endSeconds: 240,
 };

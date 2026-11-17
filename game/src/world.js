@@ -2,18 +2,21 @@
 // over), the ship's motion, spawning, collisions, scoring, combos and levels.
 // It steps in fixed slices so a screenshot scene can be staged deterministically.
 
-import { ASTEROID, COMBO, FIELD, PARTICLES, POWERUP, SALVAGE, SHIP, WAVES } from './config.js';
+import { ASTEROID, COMBO, ELITE, FIELD, PARTICLES, POWERUP, SALVAGE, SEEKER, SHIP, WAVES } from './config.js';
 import { makeRandom, range } from './random.js';
 import {
   addFloatText,
+  addRing,
   burstParticles,
   createShip,
   maybeDropPowerup,
   spawnAsteroid,
   spawnBullet,
   spawnSalvage,
+  spawnSeeker,
   stepFloatTexts,
   stepParticles,
+  stepRings,
   wrapPosition,
 } from './entities.js';
 import {
@@ -24,6 +27,7 @@ import {
   playHit,
   playLevelUp,
   playPowerup,
+  playWarn,
   playZap,
   setMuted,
   startMusic,
@@ -58,6 +62,7 @@ function starfield(rng, count) {
       size: 0.6 + rng() * 1.9,
       depth: 0.25 + rng() * 0.75,
       twinkle: rng() * Math.PI * 2,
+      hue: rng() < 0.7 ? 0 : rng() < 0.5 ? 1 : 2, // 0 white, 1 warm, 2 cool
     });
   }
   return stars;
@@ -70,15 +75,18 @@ export function createWorld(seed) {
     screen: SCREEN_TITLE,
     ship: createShip(FIELD),
     asteroids: [],
+    seekers: [],
     bullets: [],
     salvage: [],
     powerups: [],
     particles: [],
+    rings: [],
     floatTexts: [],
-    stars: starfield(rng, 130),
+    stars: starfield(rng, 200),
     score: 0,
     best: 0,
     salvaged: 0,
+    seekersDowned: 0,
     shotsFired: 0,
     shotsHit: 0,
     combo: 1,
@@ -87,8 +95,11 @@ export function createWorld(seed) {
     levelScore: 0,
     elapsed: 0,
     spawnTimer: 1.2,
+    seekerTimer: 6,
     shake: 0,
     flash: 0,
+    hitStop: 0,
+    banner: null,
     time: 0,
     seed,
   };
@@ -140,8 +151,11 @@ function breakAsteroid(world, rock, index) {
   world.asteroids.splice(index, 1);
   const tier = rock.tier;
   burstParticles(world.particles, rock.x, rock.y, tier === 'bulwark' ? '#c9d6ff' : '#ff8a5c', tier === 'big' ? PARTICLES.explosion : 16, tier === 'big' ? 260 : 200);
+  addRing(world.rings, rock.x, rock.y, tier === 'bulwark' ? '#c9d6ff' : '#ff8a5c', rock.radius * 2.6);
+  if (tier === 'big' || tier === 'bulwark') world.hitStop = Math.max(world.hitStop, 0.045);
   playBoom(tier);
   addScore(world, rock.score, rock.x, rock.y);
+  if (rock.elite) addFloatText(world.floatTexts, rock.x, rock.y - 26, 'ELITE BONUS', '#ffd166');
   world.shake = Math.min(14, world.shake + (tier === 'big' ? 7 : 4));
   for (let i = 0; i < rock.salvage; i += 1) {
     world.salvage.push(spawnSalvage(world.rng, rock.x + range(world.rng, -18, 18), rock.y + range(world.rng, -18, 18)));
@@ -170,6 +184,21 @@ function breakAsteroid(world, rock, index) {
   }
 }
 
+/** A seeker mine shot down: ring, sparks, score and its salvage. */
+function breakSeeker(world, seeker, index) {
+  world.seekers.splice(index, 1);
+  world.seekersDowned += 1;
+  burstParticles(world.particles, seeker.x, seeker.y, '#ff4dd2', 24, 300);
+  addRing(world.rings, seeker.x, seeker.y, '#ff4dd2', 90);
+  playBoom('small');
+  addScore(world, seeker.score, seeker.x, seeker.y);
+  for (let i = 0; i < seeker.salvage; i += 1) {
+    world.salvage.push(spawnSalvage(world.rng, seeker.x + range(world.rng, -18, 18), seeker.y + range(world.rng, -18, 18)));
+  }
+  const drop = maybeDropPowerup(world.rng, seeker.x, seeker.y);
+  if (drop) world.powerups.push(drop);
+}
+
 function damageShip(world) {
   const ship = world.ship;
   if (ship.invulnerable > 0 || ship.dashTimer > 0) return;
@@ -187,7 +216,9 @@ function damageShip(world) {
   world.comboTimer = 0;
   world.shake = 18;
   world.flash = 0.35;
+  world.hitStop = Math.max(world.hitStop, 0.05);
   burstParticles(world.particles, ship.x, ship.y, '#ff4d6d', 30, 320);
+  addRing(world.rings, ship.x, ship.y, '#ff4d6d', 120);
   playHit();
   if (ship.hull <= 0) {
     ship.dead = true;
@@ -251,6 +282,7 @@ function stepShip(world, input, dt) {
     ship.vy = Math.sin(ship.angle) * SHIP.dashSpeed;
     playDash();
     burstParticles(world.particles, ship.x, ship.y, '#39d5ff', 12, 180);
+    addRing(world.rings, ship.x, ship.y, '#39d5ff', 70);
   }
   if (ship.dashTimer > 0) ship.dashTimer -= dt;
   ship.x += ship.vx * dt;
@@ -260,6 +292,10 @@ function stepShip(world, input, dt) {
   ship.invulnerable = Math.max(0, ship.invulnerable - dt);
   ship.magnetTimer = Math.max(0, ship.magnetTimer - dt);
   ship.overdriveTimer = Math.max(0, ship.overdriveTimer - dt);
+  ship.muzzle = Math.max(0, ship.muzzle - dt);
+  // Engine trail: a short fading wake behind the ship.
+  ship.trail.unshift({ x: ship.x, y: ship.y });
+  if (ship.trail.length > 14) ship.trail.pop();
   // Thruster sparks while accelerating.
   if (ship.thrusting && world.particles.length < PARTICLES.max) {
     const bx = ship.x - Math.cos(ship.angle) * ship.radius;
@@ -273,7 +309,33 @@ function stepShip(world, input, dt) {
     ship.fireTimer = ship.overdriveTimer > 0 ? SHIP.fireCooldown * 0.5 : SHIP.fireCooldown;
     world.bullets.push(spawnBullet(ship));
     world.shotsFired += 1;
+    ship.muzzle = 0.06;
     playZap();
+  }
+}
+
+/** Seekers steer toward the ship with a slight wobble; they never wrap. */
+function stepSeekers(world, dt) {
+  const ship = world.ship;
+  for (const s of world.seekers) {
+    const dx = ship.x - s.x;
+    const dy = ship.y - s.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const wob = Math.sin(world.time * 3 + s.wobble) * 0.5;
+    const want = Math.atan2(dy, dx) + wob;
+    const cur = Math.atan2(s.vy, s.vx);
+    let diff = want - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = Math.max(-SEEKER.turnRate * dt, Math.min(SEEKER.turnRate * dt, diff));
+    const heading = cur + turn;
+    const speed = Math.min(SEEKER.speed * (1 + 0.04 * (world.level - 1)), Math.hypot(s.vx, s.vy) + SEEKER.homing * dt);
+    s.vx = Math.cos(heading) * speed;
+    s.vy = Math.sin(heading) * speed;
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.rotation += s.spin * dt;
+    s.flash = Math.max(0, s.flash - dt);
   }
 }
 
@@ -351,9 +413,42 @@ function collide(world) {
         break;
       }
     }
+    // Bullets vs seeker mines.
+    if (!hit) {
+      for (let si = world.seekers.length - 1; si >= 0; si -= 1) {
+        const s = world.seekers[si];
+        const dx = b.x - s.x;
+        const dy = b.y - s.y;
+        const rr = s.radius + b.radius;
+        if (dx * dx + dy * dy < rr * rr) {
+          hit = true;
+          world.shotsHit += 1;
+          s.hits -= 1;
+          s.flash = 0.12;
+          burstParticles(world.particles, b.x, b.y, '#ff4dd2', 6, 160);
+          if (s.hits <= 0) breakSeeker(world, s, si);
+          break;
+        }
+      }
+    }
     if (hit) world.bullets.splice(bi, 1);
   }
   if (ship.dead) return;
+  // Ship vs seeker mines: the mine detonates on contact.
+  for (let si = world.seekers.length - 1; si >= 0; si -= 1) {
+    const s = world.seekers[si];
+    const dx = ship.x - s.x;
+    const dy = ship.y - s.y;
+    const rr = s.radius + ship.radius - 4;
+    if (dx * dx + dy * dy < rr * rr) {
+      world.seekers.splice(si, 1);
+      burstParticles(world.particles, s.x, s.y, '#ff4dd2', 24, 300);
+      addRing(world.rings, s.x, s.y, '#ff4dd2', 90);
+      damageShip(world);
+      if (ship.dead) return;
+      break;
+    }
+  }
   // Ship vs asteroids.
   for (const rock of world.asteroids) {
     const dx = ship.x - rock.x;
@@ -406,6 +501,13 @@ function applyPowerup(world, power) {
   } else if (power === 'shield') {
     ship.shielded = true;
     addFloatText(world.floatTexts, ship.x, ship.y - 30, 'SHIELD UP', '#39d5ff');
+  } else if (power === 'repair') {
+    if (ship.hull < SHIP.maxHull) {
+      ship.hull += 1;
+      addFloatText(world.floatTexts, ship.x, ship.y - 30, 'HULL +1', '#8dff5e');
+    } else {
+      addScore(world, 500, ship.x, ship.y - 30, 'HULL FULL +500');
+    }
   } else {
     ship.overdriveTimer = POWERUP.durations.overdrive;
     addFloatText(world.floatTexts, ship.x, ship.y - 30, 'OVERDRIVE 9s', '#ff4d8d');
@@ -418,7 +520,28 @@ function stepSpawning(world, dt) {
   world.spawnTimer -= dt;
   if (world.spawnTimer <= 0 && world.asteroids.length < tuning.maxAsteroids) {
     world.spawnTimer = tuning.spawnInterval * (0.8 + world.rng() * 0.4);
-    world.asteroids.push(spawnAsteroid(world.rng, FIELD, pickTier(world.rng, tuning), world.level));
+    const rock = spawnAsteroid(world.rng, FIELD, pickTier(world.rng, tuning), world.level);
+    // Rare gold elite rocks from level 4: double score, one extra salvage.
+    if (
+      world.level >= ELITE.minLevel &&
+      (rock.tier === 'big' || rock.tier === 'mid' || rock.tier === 'bulwark') &&
+      world.rng() < ELITE.chance
+    ) {
+      rock.elite = true;
+      rock.score *= ELITE.scoreMult;
+      rock.salvage += 1;
+    }
+    world.asteroids.push(rock);
+  }
+  // Seeker mines hunt from level 3, on a slow timer, capped per level.
+  if (world.level >= SEEKER.appearLevel) {
+    world.seekerTimer -= dt;
+    if (world.seekerTimer <= 0 && world.seekers.length < SEEKER.max) {
+      world.seekerTimer = 1 / SEEKER.spawnPerSecond;
+      world.seekers.push(spawnSeeker(world.rng, FIELD, world.level));
+      addFloatText(world.floatTexts, FIELD.width / 2, 110, '⚠ SEEKER INBOUND', '#ff4dd2');
+      playWarn();
+    }
   }
   // A slow trickle of free salvage keeps the field worth crossing.
   if (world.rng() < dt * 0.5 && world.salvage.length < 8) {
@@ -430,7 +553,7 @@ function stepLevel(world) {
   if (world.levelScore >= WAVES.levelUpScore && world.level < WAVES.maxLevel) {
     world.levelScore -= WAVES.levelUpScore;
     world.level += 1;
-    addFloatText(world.floatTexts, FIELD.width / 2, 180, `LEVEL ${world.level}`, '#8dff5e');
+    world.banner = { text: `LEVEL ${world.level}`, sub: world.level >= SEEKER.appearLevel ? 'SEEKERS INBOUND' : 'THE DRIFT THICKENS', life: 2.2, maxLife: 2.2 };
     playLevelUp();
     world.flash = 0.25;
   }
@@ -442,7 +565,17 @@ export function stepWorld(world, input, dt) {
   world.shake = Math.max(0, world.shake - 30 * dt);
   world.flash = Math.max(0, world.flash - dt);
   stepParticles(world.particles, dt);
+  stepRings(world.rings, dt);
   stepFloatTexts(world.floatTexts, dt);
+  if (world.banner) {
+    world.banner.life -= dt;
+    if (world.banner.life <= 0) world.banner = null;
+  }
+  // Hit-stop: a beat of frozen time after a big break or a hull hit.
+  if (world.hitStop > 0) {
+    world.hitStop -= dt;
+    return EVENT_NONE;
+  }
   if (world.screen === SCREEN_TITLE) {
     stepAsteroids(world, dt);
     stepSalvage(world, dt);
@@ -457,6 +590,7 @@ export function stepWorld(world, input, dt) {
   stepShip(world, input, dt);
   stepBullets(world, dt);
   stepAsteroids(world, dt);
+  stepSeekers(world, dt);
   stepSalvage(world, dt);
   collide(world);
   stepSpawning(world, dt);
@@ -474,6 +608,7 @@ export function pressAction(world, input) {
   if (world.screen === SCREEN_TITLE) {
     if (input.consumePressed('start') || input.consumePressed('fire')) {
       world.screen = SCREEN_PLAY;
+      world.banner = { text: 'LEVEL 1', sub: 'BLAST THE DRIFT — SCOOP THE SALVAGE', life: 2.2, maxLife: 2.2 };
       unlockAudio();
       startMusic();
       return true;
@@ -498,6 +633,7 @@ export function pressAction(world, input) {
     if (input.consumePressed('restart') || input.consumePressed('start') || input.consumePressed('fire')) {
       resetWorld(world);
       world.screen = SCREEN_PLAY;
+      world.banner = { text: 'LEVEL 1', sub: 'BLAST THE DRIFT — SCOOP THE SALVAGE', life: 2.2, maxLife: 2.2 };
       unlockAudio();
       startMusic();
       return true;

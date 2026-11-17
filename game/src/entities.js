@@ -2,7 +2,7 @@
 // functions spawn them and step them forward. Nothing here knows about the DOM
 // or the game screens — the world owns the rules, this file owns the motion.
 
-import { ASTEROID, PARTICLES, POWERUP, SALVAGE, SHIP } from './config.js';
+import { ASTEROID, PARTICLES, POWERUP, SALVAGE, SEEKER, SHIP } from './config.js';
 import { angle, chance, pick, range } from './random.js';
 
 /** The player's skiff, centred, at rest, hull full. */
@@ -24,6 +24,8 @@ export function createShip(field) {
     overdriveTimer: 0,
     shielded: false,
     dead: false,
+    muzzle: 0,
+    trail: [], // recent positions, drawn as a fading engine trail
   };
 }
 
@@ -55,6 +57,15 @@ export function spawnAsteroid(rng, field, tier, level) {
   const verts = [];
   const points = tier === 'bulwark' ? 9 : 7;
   for (let i = 0; i < points; i += 1) verts.push(range(rng, 0.72, 1.18));
+  // Craters, fixed per rock so the same rock always looks the same.
+  const craters = [];
+  for (let i = 0; i < 3; i += 1) {
+    craters.push({
+      dx: range(rng, -0.45, 0.45),
+      dy: range(rng, -0.45, 0.45),
+      r: range(rng, 0.08, 0.18),
+    });
+  }
   return {
     kind: 'asteroid',
     tier,
@@ -70,6 +81,45 @@ export function spawnAsteroid(rng, field, tier, level) {
     spin: range(rng, -1.4, 1.4),
     rotation: angle(rng),
     verts,
+    craters,
+    elite: false,
+    flash: 0,
+  };
+}
+
+/** A seeker mine: drifts in from an edge, then homes in on the ship. */
+export function spawnSeeker(rng, field, level) {
+  const edge = Math.floor(rng() * 4);
+  const margin = SEEKER.radius + 20;
+  let x;
+  let y;
+  if (edge === 0) {
+    x = range(rng, 0, field.width);
+    y = -margin;
+  } else if (edge === 1) {
+    x = field.width + margin;
+    y = range(rng, 0, field.height);
+  } else if (edge === 2) {
+    x = range(rng, 0, field.width);
+    y = field.height + margin;
+  } else {
+    x = -margin;
+    y = range(rng, 0, field.height);
+  }
+  return {
+    kind: 'seeker',
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    radius: SEEKER.radius,
+    hits: SEEKER.hits,
+    maxHits: SEEKER.hits,
+    score: SEEKER.score,
+    salvage: SEEKER.salvage,
+    spin: range(rng, -2, 2),
+    rotation: angle(rng),
+    wobble: rng() * Math.PI * 2,
     flash: 0,
   };
 }
@@ -143,6 +193,22 @@ export function burstParticles(list, x, y, color, count, speed) {
       size: 1.5 + Math.random() * 2.5,
       color,
     });
+  }
+}
+
+/** An expanding shockwave ring, drawn additively and fading out. */
+export function addRing(list, x, y, color, maxR) {
+  list.push({ x, y, color, r: 6, maxR, life: 0.45, maxLife: 0.45 });
+}
+
+/** Step every shockwave ring and drop the faded ones. */
+export function stepRings(list, dt) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const r = list[i];
+    r.life -= dt;
+    const frac = 1 - Math.max(0, r.life / r.maxLife);
+    r.r = 6 + (r.maxR - 6) * frac * frac;
+    if (r.life <= 0) list.splice(i, 1);
   }
 }
 

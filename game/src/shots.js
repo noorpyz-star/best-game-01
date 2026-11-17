@@ -47,7 +47,9 @@ function nearestSalvage(world) {
 function nearestAsteroid(world) {
   let best = null;
   let bestDist = Infinity;
-  for (const rock of world.asteroids) {
+  // Seekers count as threats too: they home in, so they outrank distant rocks.
+  const threats = world.asteroids.concat(world.seekers);
+  for (const rock of threats) {
     const d = Math.hypot(rock.x - world.ship.x, rock.y - world.ship.y);
     if (d < bestDist) {
       bestDist = d;
@@ -62,7 +64,8 @@ function closingRock(world) {
   const ship = world.ship;
   let worst = null;
   let worstTime = Infinity;
-  for (const rock of world.asteroids) {
+  const threats = world.asteroids.concat(world.seekers);
+  for (const rock of threats) {
     const dx = rock.x - ship.x;
     const dy = rock.y - ship.y;
     const dist = Math.hypot(dx, dy);
