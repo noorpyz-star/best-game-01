@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/best-game-01/noorpyz-star/best-game-01/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/noorpyz-star/best-game-01/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-Lumen Drift — Salvage Run: a neon arcade game. Pilot a skiff through an asteroid field, blast asteroids apart, scoop the salvage they drop, and chain pickups into combos across 12 escalating levels.
+Lumen Drift — Salvage Run: a neon arcade game. Pilot a skiff through an asteroid field, blast asteroids apart, scoop the salvage they drop, and chain pickups into combos across 12 escalating levels. From level 3, homing seeker mines hunt you down; rare gold elite rocks pay double; four power-ups (magnet, shield, overdrive, hull repair) keep the run alive.
 
 ## Run it
 
