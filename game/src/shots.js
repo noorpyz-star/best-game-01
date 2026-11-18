@@ -153,6 +153,30 @@ function thrustToward(input, ux, uy) {
 }
 
 /**
+ * Keep the staged pilot off the frame's edges. The autopilot flees threats,
+ * so left alone it ends a run hugging a corner with the ship half out of the
+ * picture; a gentle pull back toward the middle keeps the ship — and the
+ * action around it — in view. Real gameplay is untouched: this only steers
+ * the screenshot scenes.
+ */
+function keepInFrame(world, input) {
+  const ship = world.ship;
+  const MARGIN = 170;
+  let bx = 0;
+  let by = 0;
+  if (ship.x < MARGIN) bx = 1;
+  else if (ship.x > FIELD.width - MARGIN) bx = -1;
+  if (ship.y < MARGIN) by = 1;
+  else if (ship.y > FIELD.height - MARGIN) by = -1;
+  if (bx === 0 && by === 0) return;
+  // Steer the aim (and the mouse pull) back toward the centre, and add
+  // matching key thrust so the pull wins over a fleeing mouse.
+  input.mouseX = (input.mouseX + FIELD.width / 2) / 2;
+  input.mouseY = (input.mouseY + FIELD.height / 2) / 2;
+  thrustToward(input, bx, by);
+}
+
+/**
  * Set `world` to the named scene (start, play or end; any other name is start)
  * and return the screen to draw over it.
  */
@@ -177,10 +201,25 @@ export function stageShot(name, world) {
       input.mouseDown = false;
     } else {
       autopilot(world, input, horizon);
+      keepInFrame(world, input);
     }
     const over = stepWorld(world, input, SAMPLE);
     input.pressed.clear();
     if (over) break;
+  }
+  // Play scene only: let a LEVEL banner fade before the capture. The banner
+  // covers the middle of the frame, and the game 2s later is the same real
+  // game, unobstructed — the pilot keeps dodging and shooting meanwhile.
+  if (name === 'play' && world.screen === SCREEN_PLAY) {
+    let extra = 0;
+    while (world.banner && extra < 150) {
+      autopilot(world, input, horizon);
+      keepInFrame(world, input);
+      const over = stepWorld(world, input, SAMPLE);
+      input.pressed.clear();
+      extra += 1;
+      if (over) break;
+    }
   }
   if (name === 'end' && world.screen !== SCREEN_OVER) {
     // Force the loss so the end frame always shows the results screen.

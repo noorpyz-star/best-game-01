@@ -182,9 +182,9 @@ function drawAsteroid(ctx, rock) {
     else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
   }
   ctx.closePath();
-  const baseColors = { big: '#5a4a6b', mid: '#6b4a3a', small: '#7a5a4a', dart: '#4a3a5a', bulwark: '#3a4a6b' };
-  const lightColors = { big: '#8a7ab0', mid: '#a87a5a', small: '#b08a6a', dart: '#7a5a8a', bulwark: '#6a7aa0' };
-  const rimColors = { big: '#b9a8d8', mid: '#d8a878', small: '#e0b088', dart: '#c080e0', bulwark: '#a8c0e8' };
+  const baseColors = { big: '#6a5578', mid: '#7d5644', small: '#8c6856', dart: '#5a4870', bulwark: '#485a80' };
+  const lightColors = { big: '#a390c8', mid: '#c08a68', small: '#c89c78', dart: '#9670b0', bulwark: '#8298c0' };
+  const rimColors = { big: '#cdbcf0', mid: '#e8b888', small: '#f0c098', dart: '#d090f0', bulwark: '#bcd4f8' };
   if (rock.elite) {
     const g = ctx.createRadialGradient(-rock.radius * 0.3, -rock.radius * 0.3, 4, 0, 0, rock.radius * 1.1);
     g.addColorStop(0, '#ffe9a8');
@@ -522,17 +522,35 @@ function drawTitle(ctx, world) {
   controls.forEach((line, i) => ctx.fillText(line, FIELD.width / 2, 360 + i * 24));
   ctx.fillStyle = '#8fa8c8';
   ctx.font = '13px system-ui, sans-serif';
-  ctx.fillText('12 LEVELS  •  5 ROCK TYPES  •  SEEKER MINES  •  ELITE GOLD ROCKS  •  4 POWER-UPS', FIELD.width / 2, 408);
+  ctx.fillText('12 LEVELS  •  5 ROCK TYPES  •  SEEKER MINES  •  ELITE GOLD ROCKS  •  4 POWER-UPS', FIELD.width / 2, 404);
+  // Power-up legend: what each canister does, in its own colour.
+  const legend = [
+    ['M ', LIME], ['MAGNET   ', DIM],
+    ['S ', CYAN], ['SHIELD   ', DIM],
+    ['O ', ROSE], ['OVERDRIVE   ', DIM],
+    ['+ ', '#ff5c5c'], ['REPAIR', DIM],
+  ];
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  let legendW = 0;
+  for (const [text] of legend) legendW += ctx.measureText(text).width;
+  let lx = FIELD.width / 2 - legendW / 2;
+  ctx.textAlign = 'left';
+  for (const [text, color] of legend) {
+    ctx.fillStyle = color;
+    ctx.fillText(text, lx, 430);
+    lx += ctx.measureText(text).width;
+  }
+  ctx.textAlign = 'center';
   // Pulsing launch prompt.
   ctx.globalAlpha = 0.65 + 0.35 * Math.sin(world.time * 4);
   ctx.fillStyle = LIME;
   ctx.font = 'bold 20px system-ui, sans-serif';
-  ctx.fillText('CLICK OR PRESS ENTER TO LAUNCH', FIELD.width / 2, 440);
+  ctx.fillText('CLICK OR PRESS ENTER TO LAUNCH', FIELD.width / 2, 462);
   ctx.globalAlpha = 1;
   if (world.best > 0) {
     ctx.fillStyle = DIM;
     ctx.font = '15px system-ui, sans-serif';
-    ctx.fillText(`BEST SCORE ${world.best}`, FIELD.width / 2, 486);
+    ctx.fillText(`BEST SCORE ${world.best}`, FIELD.width / 2, 500);
   }
   ctx.restore();
 }
